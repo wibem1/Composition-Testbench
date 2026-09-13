@@ -28,6 +28,7 @@
   .small{font-size:12px;opacity:.67;line-height:1.45}
   code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
   .diag{max-height:260px;overflow:auto;white-space:pre-wrap;background:color-mix(in srgb,CanvasText 5%,Canvas);padding:10px;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+  .api-key{-webkit-text-security:disc}
   @media(max-width:620px){.row{grid-template-columns:1fr} main{padding:20px 14px 40px}}
 </style>
 </head>
@@ -76,9 +77,9 @@
   <details>
     <summary>API-Zugänge</summary>
     <div class="small" style="margin:8px 0 10px">Schlüssel bleiben nur in diesem Browser und werden niemals in die Diagnosedatei geschrieben.</div>
-    <label for="keyOpenAI">OpenAI API Key</label><input id="keyOpenAI" type="password" autocomplete="off" />
-    <label for="keyAnthropic">Anthropic API Key</label><input id="keyAnthropic" type="password" autocomplete="off" />
-    <label for="keyGoogle">Google AI API Key</label><input id="keyGoogle" type="password" autocomplete="off" />
+    <label for="keyOpenAI">OpenAI API Key</label><input id="keyOpenAI" class="api-key" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+    <label for="keyAnthropic">Anthropic API Key</label><input id="keyAnthropic" class="api-key" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+    <label for="keyGoogle">Google AI API Key</label><input id="keyGoogle" class="api-key" type="text" inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
   </details>
 
   <details>
@@ -96,9 +97,9 @@
 <script>
 (() => {
   'use strict';
-  const APP_VERSION='0.1.0';
+  const APP_VERSION='0.1.1';
   const DEFAULT_MODELS={openai:'gpt-5.6-sol',anthropic:'claude-fable-5',google:'gemini-3.1-pro-preview'};
-  const TECHNICAL_CONTRACT=`TECHNISCHE AUSGABEANFORDERUNG – KEINE MUSIKALISCHEN ZUSATZREGELN:\nAntworte ausschließlich mit validem JSON, ohne Markdown und ohne Text außerhalb des JSON.\nDie Partitur steht entweder direkt im Wurzelobjekt oder im Feld \"score\".\nPartiturformat:\n{\n  \"title\": \"optional\",\n  \"bpm\": Zahl,\n  \"timeSignature\": [Zaehler, Nenner],\n  \"tracks\": [\n    {\n      \"name\": \"Instrument\",\n      \"program\": 0-127,\n      \"channel\": 0-15,\n      \"notes\": [[StartBeat, DauerInBeats, MIDIPitch, Velocity], ...]\n    }\n  ]\n}\nWeitere Textfelder, die der Benutzer in seinem Auftrag ausdrücklich verlangt, dürfen zusätzlich im JSON stehen.\nStartBeat und DauerInBeats dürfen Dezimalzahlen sein. MIDI-Pitch 0-127, Velocity 1-127.\nDas technische Format macht keinerlei Vorgaben zu Stil, Harmonik, Melodik, Rhythmik, Form, Artikulation oder musikalischer Qualität.`;
+  const TECHNICAL_CONTRACT=`TECHNISCHE AUSGABEANFORDERUNG – KEINE MUSIKALISCHEN ZUSATZREGELN:\nAntworte ausschließlich mit validem JSON, ohne Markdown und ohne Text außerhalb des JSON.\nDie Partitur steht entweder direkt im Wurzelobjekt oder im Feld "score".\nPartiturformat:\n{\n  "title": "optional",\n  "bpm": Zahl,\n  "timeSignature": [Zaehler, Nenner],\n  "tracks": [\n    {\n      "name": "Instrument",\n      "program": 0-127,\n      "channel": 0-15,\n      "notes": [[StartBeat, DauerInBeats, MIDIPitch, Velocity], ...]\n    }\n  ]\n}\nWeitere Textfelder, die der Benutzer in seinem Auftrag ausdrücklich verlangt, dürfen zusätzlich im JSON stehen.\nStartBeat und DauerInBeats dürfen Dezimalzahlen sein. MIDI-Pitch 0-127, Velocity 1-127.\nDas technische Format macht keinerlei Vorgaben zu Stil, Harmonik, Melodik, Rhythmik, Form, Artikulation oder musikalischer Qualität.`;
 
   const $=id=>document.getElementById(id);
   const provider=$('provider'), model=$('model'), task=$('task'), status=$('status'), diagView=$('diag');
@@ -118,125 +119,34 @@
   function updateDiag(){diagView.textContent=currentRun?JSON.stringify(currentRun,null,2):'Noch kein Testlauf.';}
   function event(phase,data={}){if(!currentRun)return;currentRun.events.push({at:iso(),phase,...data});updateDiag();}
   function setBusy(b){$('compose').disabled=b;$('repeat').disabled=b||!lastRequestSnapshot;}
-
   function fullPrompt(visibleTask){return `${visibleTask.trim()}\n\n${TECHNICAL_CONTRACT}`;}
 
   function makeRequest(p,m,promptText){
-    if(p==='openai') return {
-      provider:p, model:m, url:'https://api.openai.com/v1/responses', method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer {{API_KEY}}'},
-      body:{model:m,input:[{role:'user',content:[{type:'input_text',text:promptText}]}],store:false}
-    };
-    if(p==='anthropic') return {
-      provider:p, model:m, url:'https://api.anthropic.com/v1/messages', method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':'{{API_KEY}}','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:{model:m,max_tokens:32768,messages:[{role:'user',content:promptText}]}
-    };
-    return {
-      provider:p, model:m, url:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key={{API_KEY}}`, method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:{contents:[{role:'user',parts:[{text:promptText}]}]}
-    };
+    if(p==='openai') return {provider:p,model:m,url:'https://api.openai.com/v1/responses',method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer {{API_KEY}}'},body:{model:m,input:[{role:'user',content:[{type:'input_text',text:promptText}]}],store:false}};
+    if(p==='anthropic') return {provider:p,model:m,url:'https://api.anthropic.com/v1/messages',method:'POST',headers:{'Content-Type':'application/json','x-api-key':'{{API_KEY}}','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:{model:m,max_tokens:32768,messages:[{role:'user',content:promptText}]}};
+    return {provider:p,model:m,url:`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key={{API_KEY}}`,method:'POST',headers:{'Content-Type':'application/json'},body:{contents:[{role:'user',parts:[{text:promptText}]}]}};
   }
 
   function apiKeyFor(p){return p==='openai'?$('keyOpenAI').value.trim():p==='anthropic'?$('keyAnthropic').value.trim():$('keyGoogle').value.trim();}
-  function actualRequest(snapshot,key){
-    const headers={...snapshot.headers}; let url=snapshot.url;
-    for(const k of Object.keys(headers)) if(headers[k]==='{{API_KEY}}') headers[k]=k.toLowerCase()==='authorization'?`Bearer ${key}`:key;
-    url=url.replace('{{API_KEY}}',encodeURIComponent(key));
-    return {url,headers,body:JSON.parse(JSON.stringify(snapshot.body))};
-  }
-  function extractText(p,j){
-    if(p==='openai'){
-      if(typeof j.output_text==='string') return j.output_text;
-      const parts=[]; for(const item of (j.output||[])) for(const c of (item.content||[])) if(typeof c.text==='string') parts.push(c.text);
-      return parts.join('\n');
-    }
-    if(p==='anthropic') return (j.content||[]).filter(x=>x.type==='text').map(x=>x.text||'').join('\n');
-    return (j.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n');
-  }
-  function extractJson(text){
-    let s=String(text||'').trim();
-    s=s.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();
-    try{return JSON.parse(s)}catch(_){
-      const a=s.indexOf('{'),b=s.lastIndexOf('}'); if(a>=0&&b>a) return JSON.parse(s.slice(a,b+1)); throw _;
-    }
-  }
-  function findScore(obj){
-    const s=obj&&obj.score&&Array.isArray(obj.score.tracks)?obj.score:obj;
-    if(!s||!Array.isArray(s.tracks)||!Number.isFinite(Number(s.bpm))) throw new Error('Kein gültiges Partitur-Objekt mit bpm und tracks gefunden.');
-    return s;
-  }
-  function findIdea(obj){
-    if(!obj||typeof obj!=='object')return '';
-    const keys=['idea','kompositionsidee','description','beschreibung','concept'];
-    for(const k of keys) if(typeof obj[k]==='string'&&obj[k].trim()) return obj[k].trim();
-    return '';
-  }
+  function actualRequest(snapshot,key){const headers={...snapshot.headers};let url=snapshot.url;for(const k of Object.keys(headers))if(headers[k]==='{{API_KEY}}')headers[k]=k.toLowerCase()==='authorization'?`Bearer ${key}`:key;url=url.replace('{{API_KEY}}',encodeURIComponent(key));return{url,headers,body:JSON.parse(JSON.stringify(snapshot.body))};}
+  function extractText(p,j){if(p==='openai'){if(typeof j.output_text==='string')return j.output_text;const parts=[];for(const item of(j.output||[]))for(const c of(item.content||[]))if(typeof c.text==='string')parts.push(c.text);return parts.join('\n');}if(p==='anthropic')return(j.content||[]).filter(x=>x.type==='text').map(x=>x.text||'').join('\n');return(j.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n');}
+  function extractJson(text){let s=String(text||'').trim();s=s.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'').trim();try{return JSON.parse(s)}catch(_){const a=s.indexOf('{'),b=s.lastIndexOf('}');if(a>=0&&b>a)return JSON.parse(s.slice(a,b+1));throw _;}}
+  function findScore(obj){const s=obj&&obj.score&&Array.isArray(obj.score.tracks)?obj.score:obj;if(!s||!Array.isArray(s.tracks)||!Number.isFinite(Number(s.bpm)))throw new Error('Kein gültiges Partitur-Objekt mit bpm und tracks gefunden.');return s;}
+  function findIdea(obj){if(!obj||typeof obj!=='object')return'';const keys=['idea','kompositionsidee','description','beschreibung','concept'];for(const k of keys)if(typeof obj[k]==='string'&&obj[k].trim())return obj[k].trim();return'';}
 
   function vlq(n){n=Math.max(0,Math.round(n));let bytes=[n&0x7f];while((n>>=7))bytes.unshift((n&0x7f)|0x80);return bytes;}
-  function strBytes(s){return [...new TextEncoder().encode(s)];}
+  function strBytes(s){return[...new TextEncoder().encode(s)];}
   function u32(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]}
   function u16(n){return[(n>>>8)&255,n&255]}
   function chunk(type,data){return[...strBytes(type),...u32(data.length),...data]}
-  function buildMidi(score){
-    const ppq=480,bpm=Math.max(20,Math.min(400,Number(score.bpm)||120)),ts=Array.isArray(score.timeSignature)?score.timeSignature:[4,4];
-    const tracks=[];
-    const meta=[]; let last=0;
-    const push=(tick,bytes)=>{meta.push({tick,bytes})};
-    const mpqn=Math.round(60000000/bpm); push(0,[0xff,0x51,0x03,(mpqn>>16)&255,(mpqn>>8)&255,mpqn&255]);
-    const denPow=Math.max(0,Math.round(Math.log2(Number(ts[1])||4))); push(0,[0xff,0x58,0x04,Number(ts[0])||4,denPow,24,8]);
-    meta.sort((a,b)=>a.tick-b.tick); const md=[]; for(const e of meta){md.push(...vlq(e.tick-last),...e.bytes);last=e.tick;} md.push(0,0xff,0x2f,0); tracks.push(chunk('MTrk',md));
-    (score.tracks||[]).forEach((tr,ti)=>{
-      const ch=Math.max(0,Math.min(15,Number.isFinite(Number(tr.channel))?Number(tr.channel):(ti%16))); const prog=Math.max(0,Math.min(127,Number(tr.program)||0));
-      const ev=[]; ev.push({tick:0,p:0,b:[0xff,0x03,...vlq(strBytes(String(tr.name||`Track ${ti+1}`)).length),...strBytes(String(tr.name||`Track ${ti+1}`))]}); ev.push({tick:0,p:1,b:[0xc0|ch,prog]});
-      for(const n of (tr.notes||[])){
-        if(!Array.isArray(n)||n.length<4)continue; const st=Math.max(0,Number(n[0])||0),du=Math.max(.01,Number(n[1])||.25),pitch=Math.max(0,Math.min(127,Math.round(Number(n[2])||60))),vel=Math.max(1,Math.min(127,Math.round(Number(n[3])||80)));
-        ev.push({tick:Math.round(st*ppq),p:2,b:[0x90|ch,pitch,vel]}); ev.push({tick:Math.round((st+du)*ppq),p:1,b:[0x80|ch,pitch,0]});
-      }
-      ev.sort((a,b)=>a.tick-b.tick||a.p-b.p); const d=[];let prev=0; for(const e of ev){d.push(...vlq(e.tick-prev),...e.b);prev=e.tick;}d.push(0,0xff,0x2f,0);tracks.push(chunk('MTrk',d));
-    });
-    const header=chunk('MThd',[...u16(1),...u16(tracks.length),...u16(ppq)]); return new Uint8Array([...header,...tracks.flat()]);
-  }
+  function buildMidi(score){const ppq=480,bpm=Math.max(20,Math.min(400,Number(score.bpm)||120)),ts=Array.isArray(score.timeSignature)?score.timeSignature:[4,4];const tracks=[];const meta=[];let last=0;const push=(tick,bytes)=>{meta.push({tick,bytes})};const mpqn=Math.round(60000000/bpm);push(0,[0xff,0x51,0x03,(mpqn>>16)&255,(mpqn>>8)&255,mpqn&255]);const denPow=Math.max(0,Math.round(Math.log2(Number(ts[1])||4)));push(0,[0xff,0x58,0x04,Number(ts[0])||4,denPow,24,8]);meta.sort((a,b)=>a.tick-b.tick);const md=[];for(const e of meta){md.push(...vlq(e.tick-last),...e.bytes);last=e.tick;}md.push(0,0xff,0x2f,0);tracks.push(chunk('MTrk',md));(score.tracks||[]).forEach((tr,ti)=>{const ch=Math.max(0,Math.min(15,Number.isFinite(Number(tr.channel))?Number(tr.channel):(ti%16)));const prog=Math.max(0,Math.min(127,Number(tr.program)||0));const ev=[];ev.push({tick:0,p:0,b:[0xff,0x03,...vlq(strBytes(String(tr.name||`Track ${ti+1}`)).length),...strBytes(String(tr.name||`Track ${ti+1}`))]});ev.push({tick:0,p:1,b:[0xc0|ch,prog]});for(const n of(tr.notes||[])){if(!Array.isArray(n)||n.length<4)continue;const st=Math.max(0,Number(n[0])||0),du=Math.max(.01,Number(n[1])||.25),pitch=Math.max(0,Math.min(127,Math.round(Number(n[2])||60))),vel=Math.max(1,Math.min(127,Math.round(Number(n[3])||80)));ev.push({tick:Math.round(st*ppq),p:2,b:[0x90|ch,pitch,vel]});ev.push({tick:Math.round((st+du)*ppq),p:1,b:[0x80|ch,pitch,0]});}ev.sort((a,b)=>a.tick-b.tick||a.p-b.p);const d=[];let prev=0;for(const e of ev){d.push(...vlq(e.tick-prev),...e.b);prev=e.tick;}d.push(0,0xff,0x2f,0);tracks.push(chunk('MTrk',d));});const header=chunk('MThd',[...u16(1),...u16(tracks.length),...u16(ppq)]);return new Uint8Array([...header,...tracks.flat()]);}
 
   function stopPlayback(){scheduled.forEach(x=>{try{x.stop()}catch(_){}});scheduled=[];$('stop').disabled=true;}
-  function playScore(score){
-    stopPlayback(); const ctx=new (window.AudioContext||window.webkitAudioContext)(); const t0=ctx.currentTime+.05,secPerBeat=60/(Number(score.bpm)||120);
-    for(const [ti,tr] of (score.tracks||[]).entries()) for(const n of (tr.notes||[])){
-      if(!Array.isArray(n)||n.length<4)continue; const start=t0+Number(n[0])*secPerBeat,dur=Math.max(.03,Number(n[1])*secPerBeat),freq=440*Math.pow(2,(Number(n[2])-69)/12),vel=Math.max(.02,Math.min(1,Number(n[3])/127));
-      const o=ctx.createOscillator(),g=ctx.createGain(); o.type=(ti%3===0?'sine':ti%3===1?'triangle':'sine'); o.frequency.value=freq; g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.13*vel,start+.015);g.gain.setValueAtTime(.13*vel,Math.max(start+.02,start+dur-.05));g.gain.exponentialRampToValueAtTime(.0001,start+dur);o.connect(g).connect(ctx.destination);o.start(start);o.stop(start+dur+.02);scheduled.push(o);
-    } $('stop').disabled=false;
-  }
+  function playScore(score){stopPlayback();const ctx=new(window.AudioContext||window.webkitAudioContext)();const t0=ctx.currentTime+.05,secPerBeat=60/(Number(score.bpm)||120);for(const[ti,tr]of(score.tracks||[]).entries())for(const n of(tr.notes||[])){if(!Array.isArray(n)||n.length<4)continue;const start=t0+Number(n[0])*secPerBeat,dur=Math.max(.03,Number(n[1])*secPerBeat),freq=440*Math.pow(2,(Number(n[2])-69)/12),vel=Math.max(.02,Math.min(1,Number(n[3])/127));const o=ctx.createOscillator(),g=ctx.createGain();o.type=(ti%3===0?'sine':ti%3===1?'triangle':'sine');o.frequency.value=freq;g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.13*vel,start+.015);g.gain.setValueAtTime(.13*vel,Math.max(start+.02,start+dur-.05));g.gain.exponentialRampToValueAtTime(.0001,start+dur);o.connect(g).connect(ctx.destination);o.start(start);o.stop(start+dur+.02);scheduled.push(o);}$('stop').disabled=false;}
 
-  async function run(snapshot, repeatOf=null){
-    const key=apiKeyFor(snapshot.provider); if(!key) throw new Error(`API-Key für ${snapshot.provider} fehlt.`);
-    currentRun={schema:'minimal-composer-diagnosis-v1',app:{name:'Minimal Composer Testbench',version:APP_VERSION},testId:testId(),startedAt:iso(),repeatOf,contextMode:'isolated-single-request',input:{visibleTask:snapshot.visibleTask,provider:snapshot.provider,model:snapshot.model},technicalContract:TECHNICAL_CONTRACT,events:[]};
-    currentMidiBlob=null; updateDiag(); event('run_started',{note:'Keine frühere Unterhaltung oder Komposition wird an das Modell übertragen.'});
-    const req=actualRequest(snapshot,key),bodyText=JSON.stringify(req.body); const bodyHash=await sha256Text(bodyText);
-    currentRun.outbound={url:snapshot.url,method:'POST',headers:redactHeaders(snapshot.headers),body:req.body,bodySha256:bodyHash,authNote:'API-Schlüssel absichtlich nicht gespeichert.'};
-    event('request_frozen',{bodySha256:bodyHash}); updateDiag();
-    const started=performance.now(); const res=await fetch(req.url,{method:'POST',headers:req.headers,body:bodyText}); const raw=await res.text();
-    const responseHeaders={};res.headers.forEach((v,k)=>responseHeaders[k]=v);
-    currentRun.response={receivedAt:iso(),elapsedMs:Math.round(performance.now()-started),status:res.status,statusText:res.statusText,headers:responseHeaders,rawBody:raw}; event('raw_response_received',{status:res.status,bytes:new TextEncoder().encode(raw).length});
-    if(!res.ok){currentRun.completedAt=iso();currentRun.status='api_error';updateDiag();throw new Error(`API ${res.status}: ${raw.slice(0,500)}`)}
-    let jsonResponse; try{jsonResponse=JSON.parse(raw)}catch(e){throw new Error('API-Antwort war kein JSON-Transportobjekt.');}
-    const text=extractText(snapshot.provider,jsonResponse); currentRun.response.extractedModelText=text; event('model_text_extracted',{characters:text.length});
-    const modelObj=extractJson(text); currentRun.parsedModelJson=modelObj; event('model_json_parsed',{changed:false,note:'Nur JSON geparst; keine musikalische Korrektur.'});
-    const score=findScore(modelObj); currentRun.score=score; const idea=findIdea(modelObj); if(idea)currentRun.idea=idea;
-    const midiBytes=buildMidi(score),buf=midiBytes.buffer.slice(midiBytes.byteOffset,midiBytes.byteOffset+midiBytes.byteLength); currentMidiBlob=new Blob([midiBytes],{type:'audio/midi'}); const midiHash=await sha256Buffer(buf);
-    currentRun.midi={bytes:midiBytes.byteLength,sha256:midiHash,note:'Deterministisch lokal aus den unveränderten Partiturwerten erzeugt; keine musikalische Nachbearbeitung.'}; currentRun.completedAt=iso();currentRun.status='ok'; event('midi_generated',{bytes:midiBytes.byteLength,sha256:midiHash}); updateDiag();
-    currentRun._score=score;
-    $('resultCard').hidden=false;$('title').textContent=score.title||'Komposition';$('facts').textContent=`${score.tracks.length} Spur(en) · ${score.bpm} BPM · Test-ID ${currentRun.testId}`;
-    $('ideaWrap').hidden=!idea;$('idea').textContent=idea||'';$('play').disabled=false;$('midi').disabled=false;$('diagnosis').disabled=false;$('stop').disabled=true;
-    lastRequestSnapshot=JSON.parse(JSON.stringify(snapshot)); $('repeat').disabled=false;
-    status.textContent='Fertig. Komposition und vollständiges Protokoll liegen vor.';
-  }
+  async function run(snapshot,repeatOf=null){const key=apiKeyFor(snapshot.provider);if(!key)throw new Error(`API-Key für ${snapshot.provider} fehlt.`);currentRun={schema:'minimal-composer-diagnosis-v1',app:{name:'Minimal Composer Testbench',version:APP_VERSION},testId:testId(),startedAt:iso(),repeatOf,contextMode:'isolated-single-request',input:{visibleTask:snapshot.visibleTask,provider:snapshot.provider,model:snapshot.model},technicalContract:TECHNICAL_CONTRACT,events:[]};currentMidiBlob=null;updateDiag();event('run_started',{note:'Keine frühere Unterhaltung oder Komposition wird an das Modell übertragen.'});const req=actualRequest(snapshot,key),bodyText=JSON.stringify(req.body);const bodyHash=await sha256Text(bodyText);currentRun.outbound={url:snapshot.url,method:'POST',headers:redactHeaders(snapshot.headers),body:req.body,bodySha256:bodyHash,authNote:'API-Schlüssel absichtlich nicht gespeichert.'};event('request_frozen',{bodySha256:bodyHash});updateDiag();const started=performance.now();const res=await fetch(req.url,{method:'POST',headers:req.headers,body:bodyText});const raw=await res.text();const responseHeaders={};res.headers.forEach((v,k)=>responseHeaders[k]=v);currentRun.response={receivedAt:iso(),elapsedMs:Math.round(performance.now()-started),status:res.status,statusText:res.statusText,headers:responseHeaders,rawBody:raw};event('raw_response_received',{status:res.status,bytes:new TextEncoder().encode(raw).length});if(!res.ok){currentRun.completedAt=iso();currentRun.status='api_error';updateDiag();throw new Error(`API ${res.status}: ${raw.slice(0,500)}`)}let jsonResponse;try{jsonResponse=JSON.parse(raw)}catch(e){throw new Error('API-Antwort war kein JSON-Transportobjekt.');}const text=extractText(snapshot.provider,jsonResponse);currentRun.response.extractedModelText=text;event('model_text_extracted',{characters:text.length});const modelObj=extractJson(text);currentRun.parsedModelJson=modelObj;event('model_json_parsed',{changed:false,note:'Nur JSON geparst; keine musikalische Korrektur.'});const score=findScore(modelObj);currentRun.score=score;const idea=findIdea(modelObj);if(idea)currentRun.idea=idea;const midiBytes=buildMidi(score),buf=midiBytes.buffer.slice(midiBytes.byteOffset,midiBytes.byteOffset+midiBytes.byteLength);currentMidiBlob=new Blob([midiBytes],{type:'audio/midi'});const midiHash=await sha256Buffer(buf);currentRun.midi={bytes:midiBytes.byteLength,sha256:midiHash,note:'Deterministisch lokal aus den unveränderten Partiturwerten erzeugt; keine musikalische Nachbearbeitung.'};currentRun.completedAt=iso();currentRun.status='ok';event('midi_generated',{bytes:midiBytes.byteLength,sha256:midiHash});updateDiag();currentRun._score=score;$('resultCard').hidden=false;$('title').textContent=score.title||'Komposition';$('facts').textContent=`${score.tracks.length} Spur(en) · ${score.bpm} BPM · Test-ID ${currentRun.testId}`;$('ideaWrap').hidden=!idea;$('idea').textContent=idea||'';$('play').disabled=false;$('midi').disabled=false;$('diagnosis').disabled=false;$('stop').disabled=true;lastRequestSnapshot=JSON.parse(JSON.stringify(snapshot));$('repeat').disabled=false;status.textContent='Fertig. Komposition und vollständiges Protokoll liegen vor.';}
 
-  function makeSnapshot(){
-    const visibleTask=task.value.trim(); if(!visibleTask)throw new Error('Bitte einen Kompositionsauftrag eingeben.'); const p=provider.value,m=model.value.trim(); if(!m)throw new Error('Bitte ein Modell angeben.');
-    const promptText=fullPrompt(visibleTask),req=makeRequest(p,m,promptText); return {...req,visibleTask,promptText};
-  }
-
+  function makeSnapshot(){const visibleTask=task.value.trim();if(!visibleTask)throw new Error('Bitte einen Kompositionsauftrag eingeben.');const p=provider.value,m=model.value.trim();if(!m)throw new Error('Bitte ein Modell angeben.');const promptText=fullPrompt(visibleTask),req=makeRequest(p,m,promptText);return{...req,visibleTask,promptText};}
   $('compose').addEventListener('click',async()=>{stopPlayback();setBusy(true);status.textContent='Komponiere …';try{await run(makeSnapshot(),null)}catch(e){status.textContent='Fehler: '+e.message;if(currentRun){event('error',{message:e.message});currentRun.status='error';currentRun.completedAt=iso();updateDiag();$('diagnosis').disabled=false}}finally{setBusy(false)}});
   $('repeat').addEventListener('click',async()=>{if(!lastRequestSnapshot)return;stopPlayback();setBusy(true);const prior=currentRun?.testId||null;status.textContent='Wiederhole exakt denselben Request …';try{await run(JSON.parse(JSON.stringify(lastRequestSnapshot)),prior)}catch(e){status.textContent='Fehler: '+e.message;if(currentRun){event('error',{message:e.message});currentRun.status='error';currentRun.completedAt=iso();updateDiag();$('diagnosis').disabled=false}}finally{setBusy(false)}});
   $('play').addEventListener('click',()=>currentRun?playScore(currentRun._score||currentRun.score):null);$('stop').addEventListener('click',stopPlayback);
